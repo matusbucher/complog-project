@@ -1,15 +1,36 @@
 from __future__ import annotations
 
+"""
+sokoban.py
+--------------
+Planner for Sokoban game solutions. Provides parsing of textual maps,
+compilation to a SAT planning encoding, and solving via an external MiniSat solver.
+
+This module contains:
+- small helpers and enums for tiles and directions,
+- a `Parser` class to convert textual maps into an internal `SokobanMap`,
+- a `LogicProgram` class that compiles a planning encoding into CNF (DIMACS or human-readable),
+- a `Planner` class that uses the `LogicProgram` and an external MiniSat binary to find the minimal-step plan.
+
+Usage (CLI):
+    python sokoban.py <mapfile> <minisat-path> [-s MAXSTEPS] [-i input] [-o output] [-r readablecnf]
+
+Dependencies:
+- Python 3.7+
+- NumPy library
+- An external MiniSat solver binary
+"""
+
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple, Union
 
-import numpy as np
 import subprocess
 import argparse
 import os
 
+import numpy as np
 
 
 Position = Tuple[int, int]
@@ -21,16 +42,6 @@ class Tile(Enum):
     STORAGE = "X"
     FLOOR = " "
 
-    @classmethod
-    def from_char(cls, ch: str) -> "Tile":
-        """Return Tile enum for a character. Unknown characters map to FLOOR."""
-        if ch == "#":
-            return cls.WALL
-        if ch == "X":
-            return cls.STORAGE
-        return cls.FLOOR
-
-
 
 class Direction(Enum):
     RIGHT = 0
@@ -39,6 +50,9 @@ class Direction(Enum):
     DOWN = 3
 
     def to_string(self) -> str:
+        """
+        Return a string name representing the direction.
+        """
         match self:
             case Direction.RIGHT:
                 return "right"
@@ -50,6 +64,10 @@ class Direction(Enum):
                 return "down"
     
     def to_vector(self) -> Tuple[int, int]:
+        """
+        Return a 2D integer displacement for the direction.
+        The returned object is a NumPy array to simplify vector arithmetic.
+        """
         match self:
             case Direction.RIGHT:
                 return np.array([0, 1])
@@ -67,25 +85,31 @@ class SokobanMap:
     height: int
     width: int
     grid: List[List[Tile]]
-    crates: Set[Position]
-    sokoban: Optional[Position]
+    crates: List[Position]
+    sokoban: Position
 
 
 class ParserError(ValueError):
-    """Raised when map parsing encounters invalid or inconsistent state."""
+    """
+    Raised when map parsing encounters invalid or inconsistent state.
+    """
 
 class Parser:
     """
     Parse a sokoban map in text representation into a SokobanMap object.
     """
 
-    _CRATE_CHARS: Set[str] = {"C", "c"}
-    _SOKOBAN_CHARS: Set[str] = {"S", "s"}
+    _WALL_CHAR: str = "#"
+    _STORAGE_CHARS: List[str] = ["X", "c", "s"]
+    _CRATE_CHARS: List[str] = ["C", "c"]
+    _SOKOBAN_CHARS: List[str] = ["S", "s"]
 
     def __init__(self, lines: Sequence[str]):
         """
-        Construct a Parser from a sequence of string lines.
-        Use from_file() to parse directly from file.
+        Construct a Parser from a sequence of string lines
+        representing map's rows.
+
+        Use `from_file()` to parse directly from file.
         """
         self._lines: List[str] = [line.rstrip("\n") for line in lines]
         self._height: int = len(self._lines)
@@ -95,8 +119,6 @@ class Parser:
     def from_file(cls, path: PathLike) -> SokobanMap:
         """
         Read the file, parse it and return a SokobanMap.
-        Raises FileNotFoundError if the file does not exist
-        and ParserError on parsing problems.
         """
         p = Path(path)
         if not p.is_file():
@@ -117,9 +139,9 @@ class Parser:
             row: List[Tile] = []
             for j in range(self._width):
                 ch = line[j] if j < len(line) else " "
-                if ch == "#":
+                if ch == self._WALL_CHAR:
                     tile = Tile.WALL
-                elif ch in ("X", "c", "s"):
+                elif ch in self._STORAGE_CHARS:
                     tile = Tile.STORAGE
                 else:
                     tile = Tile.FLOOR
@@ -128,28 +150,45 @@ class Parser:
                     crates.append((i, j))
                 if ch in self._SOKOBAN_CHARS:
                     if sokoban is not None:
-                        raise ParserError(
-                            f"Map contains more than one sokoban player position (previous at {sokoban}, additional at {(i, j)})"
-                        )
+                        # Map with multiple sokoban positions is an invalid map.
+                        raise ParserError(f"Map contains more than one sokoban player position (previous at {sokoban}, additional at {(i, j)})")
                     sokoban = (i, j)
 
                 row.append(tile)
             grid.append(row)
+        
+        # Map with no sokoban positions is an invalid map.
+        if sokoban is None:
+            raise ParserError("Map does not contain a sokoban player start position.")
 
         return SokobanMap(width=self._width, height=self._height, grid=grid, crates=crates, sokoban=sokoban)
 
 
 
 class LogicProgram():
-    '''
-    Generate a logic program for the given sokoban map.
-    '''
+    """
+    Generate a planning logic program (CNF) for a Sokoban map.
+
+    The encoding creates boolean variables for:
+    - static facts: `wall(i,j)` and `storage(i,j)`,
+    - fluents per step: `crate(i,j,t)` and `sokoban(i,j,t)`,
+    - actions per step: `move(i,j,dir,t)`, `push(i,j,dir,t)`, and `noop(t)`.
+
+    The class has methods to write DIMACS and a human-readable CNF dump.
+    """
     def __init__(self, sokoban_map: SokobanMap, max_steps: int = 50):
+        """
+        Initialize the logic program encoding for the given Sokoban map
+        and for the given maximum steps.
+
+        To set the goal step, use `set_goal()` after inicialization.
+        """
         self._sokoban_map: SokobanMap = sokoban_map
         self._max_steps: int = max_steps
-        self._goal_steps: Optional[int] = None
 
+        # variable name -> integer index for DIMACS vars
         self._vars_map: Optional[List[str]] = []
+        # caches for variable lookups to avoid creating duplicates
         self._wall_vars: Optional[Dict[Tuple[int, int], int]] = {}
         self._storage_vars: Optional[Dict[Tuple[int, int], int]] = {}
         self._crate_vars: Optional[Dict[Tuple[int, int, int], int]] = {}
@@ -158,16 +197,20 @@ class LogicProgram():
         self._push_vars: Optional[Dict[Tuple[int, int, Direction, int], int]] = {}
         self._noop_vars: Optional[Dict[int, int]] = {}
 
+        # Initial state and clause store. Clauses are grouped per step for
+        # convenience when writing out step-bounded encodings and to avoid
+        # generating clauses repeatedly.
         self._init_state: Optional[List[int]] = []
         self._clauses: Optional[List[List[List[int]]]] = [[] for _ in range(self._max_steps)]
 
-        self.__add_init()
+        # Build the encoding.
         self.__add_init()
         self.__add_move_effects()
         self.__add_push_effects()
         self.__add_one_action_per_step()
         self.__add_frame_axioms()
 
+        # goal step to be set before saving DIMACS
         self._goal_state: Optional[List[int]] = None
 
     @classmethod
@@ -199,6 +242,7 @@ class LogicProgram():
         return f"noop({step})"
     
     def __new_variable(self, name: str) -> int:
+        # Append and return variable index for DIMACS (1-based).
         self._vars_map.append(name)
         return len(self._vars_map)
 
@@ -241,6 +285,7 @@ class LogicProgram():
         return 0 <= i < self._sokoban_map.height and 0 <= j < self._sokoban_map.width
     
     def __add_init(self) -> None:
+        # Add initial state of sokoban map
         for i in range(self._sokoban_map.height):
             for j in range(self._sokoban_map.width):
                 w = self.__wall_var(i, j)
@@ -248,6 +293,7 @@ class LogicProgram():
                 c = self.__crate_var(i, j, 0)
                 so = self.__sokoban_var(i, j, 0)
 
+                # Static facts: whether a cell is a floor/wall/storage.
                 match self._sokoban_map.grid[i][j]:
                     case Tile.FLOOR:
                         self._init_state.append(-w)
@@ -258,18 +304,22 @@ class LogicProgram():
                     case Tile.STORAGE:
                         self._init_state.append(-w)
                         self._init_state.append(st)
-                
+
+                # Crate fluents in step 0
                 if (i, j) in self._sokoban_map.crates:
                     self._init_state.append(c)
                 else:
                     self._init_state.append(-c)
 
+                # Sokoban fluents in step 0
                 if self._sokoban_map.sokoban == (i, j):
                     self._init_state.append(so)
                 else:
                     self._init_state.append(-so)
     
     def __add_move_effects(self) -> None:
+        # Add preconditions and effects of move actions
+        # (sokoban moves without pushing any crate)
         for step in range(self._max_steps):
             for i in range(self._sokoban_map.height):
                 for j in range(self._sokoban_map.width):
@@ -277,19 +327,24 @@ class LogicProgram():
                         move = self.__move_var(i, j, direction, step)
                         target = np.add((i, j), direction.to_vector())
 
+                        # Forbid moves that would send sokoban out of map
                         if not self.__valid_coords(*target):
                             self._clauses[step].append([-move])
                             continue
                         
-                        # Preconditions
+                        # Preconditions: sokoban must be at (i,j) and target cell
+                        # must not be a wall or a crate.
                         self._clauses[step].append([-move, self.__sokoban_var(i, j, step)])
                         self._clauses[step].append([-move, -self.__wall_var(*target)])
                         self._clauses[step].append([-move, -self.__crate_var(*target, step)])
-                        # Effects
+                        
+                        # Effects: sokoban moves to target and leaves old position.
                         self._clauses[step].append([-move, self.__sokoban_var(*target, step + 1)])
                         self._clauses[step].append([-move, -self.__sokoban_var(i, j, step + 1)])
     
     def __add_push_effects(self) -> None:
+        # Add preconditions and effects of push actions
+        # (sokoban moves together with pushing crate)
         for step in range(self._max_steps):
             for i in range(self._sokoban_map.height):
                 for j in range(self._sokoban_map.width):
@@ -298,23 +353,29 @@ class LogicProgram():
                         crate_pos = np.add((i, j), direction.to_vector())
                         target = np.add(crate_pos, direction.to_vector())
 
+                        # Forbid pushes that would send crate out of map
                         if not self.__valid_coords(*target):
                             self._clauses[step].append([-push])
                             continue
-                        
-                        # Preconditions
+
+                        # Preconditions: sokoban at (i,j), crate at crate_pos, and
+                        # target cell free of walls and other crates.
                         self._clauses[step].append([-push, self.__sokoban_var(i, j, step)])
                         self._clauses[step].append([-push, self.__crate_var(*crate_pos, step)])
                         self._clauses[step].append([-push, -self.__wall_var(*target)])
                         self._clauses[step].append([-push, -self.__crate_var(*target, step)])
-                        # Effects
+
+                        # Effects: sokoban steps into crate's old position and the
+                        # crate moves to the target cell.
                         self._clauses[step].append([-push, self.__sokoban_var(*crate_pos, step + 1)])
                         self._clauses[step].append([-push, -self.__sokoban_var(i, j, step + 1)])
                         self._clauses[step].append([-push, self.__crate_var(*target, step + 1)])
                         self._clauses[step].append([-push, -self.__crate_var(*crate_pos, step + 1)])
 
     def __add_one_action_per_step(self) -> None:
+        # Add clauses ensuring exactly one action per step
         for step in range(self._max_steps):
+            # At least one action is chosen
             action_vars: List[int] = []
             for i in range(self._sokoban_map.height):
                 for j in range(self._sokoban_map.width):
@@ -323,63 +384,86 @@ class LogicProgram():
                         action_vars.append(self.__push_var(i, j, direction, step))
             action_vars.append(self.__noop_var(step))
             
+            # No more than one action is chosen
             self._clauses[step].append(action_vars)
             for idx1 in range(len(action_vars)):
                 for idx2 in range(idx1 + 1, len(action_vars)):
                     self._clauses[step].append([-action_vars[idx1], -action_vars[idx2]])
     
     def __add_frame_axioms(self) -> None:
+        # Add explanatory frame problem axioms
         for step in range(self._max_steps):
             for i in range(self._sokoban_map.height):
                 for j in range(self._sokoban_map.width):
-                    # Sokoban frame axioms
+                    # Sokoban moved from cell (i,j)
                     clause = [-self.__sokoban_var(i, j, step), self.__sokoban_var(i, j, step + 1)]
                     for direction in Direction:
                         target = np.add((i, j), direction.to_vector())
+                        # Skipping invalid moves/pushes
                         if not self.__valid_coords(*target):
                             continue
                         clause.append(self.__move_var(i, j, direction, step))
                         clause.append(self.__push_var(i, j, direction, step))
                     self._clauses[step].append(clause)
                     
+                    # Sokoban moved to cell (i,j)
                     clause = [self.__sokoban_var(i, j, step), -self.__sokoban_var(i, j, step + 1)]
                     for direction in Direction:
                         source = np.subtract((i, j), direction.to_vector())
+                        # Skipping invalid moves/pushes
                         if not self.__valid_coords(*source):
                             continue
                         clause.append(self.__move_var(*source, direction, step))
                         clause.append(self.__push_var(*source, direction, step))
                     self._clauses[step].append(clause)
 
-                    # Crate frame axioms
+                    # Crate was moved from cell (i,j)
                     clause = [-self.__crate_var(i, j, step), self.__crate_var(i, j, step + 1)]
                     for direction in Direction:
                         source = np.subtract((i, j), direction.to_vector())
                         target = np.add((i, j), direction.to_vector())
+                        # Skipping invalid pushes
                         if not self.__valid_coords(*source) or not self.__valid_coords(*target):
                             continue
                         clause.append(self.__push_var(*source, direction, step))
                     self._clauses[step].append(clause)
                     
+                    # Crate was moved to cell (i,j)
                     clause = [self.__crate_var(i, j, step), -self.__crate_var(i, j, step + 1)]
                     for direction in Direction:
                         source = np.subtract((i, j), 2 * direction.to_vector())
+                        # Skipping invalid pushes
                         if not self.__valid_coords(*source):
                             continue
                         clause.append(self.__push_var(*source, direction, step))
                     self._clauses[step].append(clause)
     
     def get_max_steps(self) -> int:
+        """
+        Return the maximum number of steps provided during class construction.
+        """
         return self._max_steps
 
     def lit2str(self, lit: int) -> str:
+        """
+        Convert a signed literal back to its textual variable name.
+        """
+        if abs(lit) > len(self._vars_map):
+            raise ValueError(f"Literal {lit} is not a valid variable index.")
+
         return f"{self._vars_map[abs(lit) - 1]}" if lit > 0 else f"-{self._vars_map[abs(lit) - 1]}"
 
     def set_goal(self, steps: int) -> LogicProgram:
+        """
+        Set the goal step - that is, at which step should be all
+        crates already placed in storage cells. This results in a
+        satisfiable or unsatisfiable program.
+        """
+
         if steps > self._max_steps:
             raise ValueError(f"Requested steps {steps} exceed maximum configured steps {self._max_steps}.")
         
-        self._goal_steps = steps
+        self._goal_step = steps
         self._goal_state = []
 
         for i in range(self._sokoban_map.height):
@@ -390,8 +474,15 @@ class LogicProgram():
         return self
     
     def save_dimacs(self, path: PathLike) -> LogicProgram:      
+        """
+        Write the current encoding to `path` in DIMACS format as a MiniSat solver input.
+        
+        If the goal step is not set yet, the encoding will contain clauses for
+        each step up to the maximum steps specified during construction.
+        """
+
         num_vars = len(self._vars_map)
-        num_clauses = len(self._init_state) + len(self._goal_state) + sum(len(self._clauses[s]) for s in range(self._goal_steps))
+        num_clauses = len(self._init_state) + len(self._goal_state) + sum(len(self._clauses[s]) for s in range(self._goal_step))
 
         p = Path(path)
         with p.open("w") as file:
@@ -400,7 +491,7 @@ class LogicProgram():
             for lit in self._init_state:
                 file.write(f"{lit} 0\n")
 
-            for s in range(self._goal_steps if self._goal_steps is not None else self._max_steps):
+            for s in range(self._goal_step if self._goal_step is not None else self._max_steps):
                 for clause in self._clauses[s]:
                     file.write(" ".join(str(lit) for lit in clause) + " 0\n")
 
@@ -411,6 +502,13 @@ class LogicProgram():
         return self
     
     def save_cnf_readable(self, path: PathLike) -> LogicProgram:
+        """
+        Write a human-readable dump of the CNF to `path`.
+        
+        If the goal step is not set yet, the dump will contain clauses for
+        each step up to the maximum steps specified during construction.
+        """
+
         p = Path(path)
         with p.open("w") as file:
             file.write("Initial State:\n")
@@ -418,7 +516,7 @@ class LogicProgram():
                 file.write(f"  {self.lit2str(lit)}\n")
 
             file.write("\nClauses per step:\n")
-            for s in range(self._goal_steps if self._goal_steps is not None else self._max_steps):
+            for s in range(self._goal_step if self._goal_step is not None else self._max_steps):
                 file.write(f"\n  Step {s}:\n")
                 for clause in self._clauses[s]:
                     file.write("    " + " v ".join(self.lit2str(lit) for lit in clause) + "\n")
@@ -431,23 +529,21 @@ class LogicProgram():
         return self
 
 
-
-class PlannerError(ValueError):
-    """Raised when planner encounters an error."""
-
 class Planner():
     """
     Finds the shortest solution for the given sokoban map.
+
+    Wrapper around `LogicProgram` class, implementing binary search.
     """
     def __init__(self, sokoban_map: SokobanMap, max_steps: int, solver_path: PathLike, solver_input: PathLike, solver_output: PathLike):
         if solver_path is None or not os.path.isfile(solver_path):
-            raise PlannerError(f"SAT solver not found at path: {solver_path!s}")
+            raise FileNotFoundError(f"MiniSat binary not found at path: {solver_path!s}")
         
         if solver_input is None or os.path.exists(solver_input) and not os.access(solver_input, os.W_OK):
-            raise PlannerError(f"Cannot write to solver input file: {solver_input!s}")
+            raise FileNotFoundError(f"Cannot write to solver input file: {solver_input!s}")
         
         if solver_output is None or os.path.exists(solver_output) and not os.access(solver_output, os.W_OK):
-            raise PlannerError(f"Cannot write to solver output file: {solver_output!s}")
+            raise FileNotFoundError(f"Cannot write to solver output file: {solver_output!s}")
 
         self._logic_program: LogicProgram = LogicProgram(sokoban_map, max_steps)
         self._solver_path: PathLike = solver_path
@@ -455,10 +551,10 @@ class Planner():
         self._solver_output: PathLike = solver_output
 
     def __parse_solution(self) -> List[str]:
-        """Parse SAT solver output and extract solution."""
         solution: List[str] = []
         with open(self._solver_output, "r") as file:
             for i, line in enumerate(file):
+                # MiniSat prints the model as the second line (index 1)
                 if i == 1:
                     literals = line.strip().split()
                     for lit in [int(x) for x in literals]:
@@ -468,18 +564,23 @@ class Planner():
                                 solution.append(var_name)
 
         def extract_step(action: str) -> int:
+            # extract final numeric argument which is the step index
             if action.startswith("noop"):
                 return int(action[action.index("(") + 1 : action.index(")")])
             else:
                 return int(action[action.rindex(",") + 1 : action.index(")")])
-        
+
+        # return sorted solution by steps (sequence of actions in order)
         return sorted(solution, key=extract_step)
 
     def find_solution(self) -> Optional[List[str]]:
-        """Find solution using binary search on number of steps."""
+        """
+        Search for a shortest-step plan by calling the MiniSat solver and return ordered actions if found.
+        """
         least_steps = -1
         left, right = 1, self._logic_program.get_max_steps()
 
+        # Binary search (possible because of noop action)
         while left <= right:
             mid = (left + right) // 2
             self._logic_program.set_goal(mid).save_dimacs(self._solver_input)
@@ -499,6 +600,7 @@ class Planner():
         if least_steps == -1:
             return None
         
+        # Run MiniSat again for the shortest plan to extract the sequence of actions
         self._logic_program.set_goal(least_steps).save_dimacs(self._solver_input)
         result = subprocess.run(
             [self._solver_path, self._solver_input, self._solver_output],
@@ -509,7 +611,9 @@ class Planner():
         return self.__parse_solution()
     
     def save_readable_cnf(self, path: PathLike) -> Planner:
-        """Save human-readable CNF to the given path."""
+        """
+        Save a human-readable CNF of the current underlying logic program.
+        """
         self._logic_program.save_cnf_readable(path)
         return self
 
@@ -520,10 +624,10 @@ ARGPARSER = argparse.ArgumentParser(
     description="Solver for Sokoban game using SAT planning.")    
 
 ARGPARSER.add_argument("mapfile", type=str, help="Path to the Sokoban map file.")
-ARGPARSER.add_argument("minisat", type=str, help="Path to the Minisat executable.")
+ARGPARSER.add_argument("minisat", type=str, help="Path to the MiniSat executable.")
 ARGPARSER.add_argument("-s", "--maxsteps", type=int, default=50, help="Maximum number of steps to search for a solution (default 50).")
-ARGPARSER.add_argument("-i", "--input", type=str, default="solver_input.cnf", help="File where the input for Minisat will be stored. The file will be created/overwritten, so it need not exist beforehand (default 'solver_input.cnf').")
-ARGPARSER.add_argument("-o", "--output", type=str, default="solver_output.txt", help="File where the output from Minisat will be stored. The file will be created/overwritten, so it need not exist beforehand (default 'solver_output.txt').")
+ARGPARSER.add_argument("-i", "--input", type=str, default="solver_input.cnf", help="File where the input for MiniSat will be stored. The file will be created/overwritten, so it need not exist beforehand (default 'solver_input.cnf').")
+ARGPARSER.add_argument("-o", "--output", type=str, default="solver_output.cnf", help="File where the output from MiniSat will be stored. The file will be created/overwritten, so it need not exist beforehand (default 'solver_output.cnf').")
 ARGPARSER.add_argument("-r", "--readablecnf", type=str, default=None, help="If provided, a human-readable version of the generated CNF will be saved to this file.")
 
 
@@ -545,7 +649,7 @@ if __name__ == "__main__":
             solver_input=args.input,
             solver_output=args.output
         )
-    except PlannerError as e:
+    except FileNotFoundError as e:
         print(f"Error: {e}")
         exit(1)
 
