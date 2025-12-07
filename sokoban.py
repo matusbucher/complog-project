@@ -625,10 +625,10 @@ ARGPARSER = argparse.ArgumentParser(
 
 ARGPARSER.add_argument("mapfile", type=str, help="Path to the Sokoban map file.")
 ARGPARSER.add_argument("minisat", type=str, help="Path to the MiniSat executable.")
-ARGPARSER.add_argument("-s", "--maxsteps", type=int, default=50, help="Maximum number of steps to search for a solution (default 50).")
-ARGPARSER.add_argument("-i", "--input", type=str, default="solver_input.cnf", help="File where the input for MiniSat will be stored. The file will be created/overwritten, so it need not exist beforehand (default 'solver_input.cnf').")
-ARGPARSER.add_argument("-o", "--output", type=str, default="solver_output.cnf", help="File where the output from MiniSat will be stored. The file will be created/overwritten, so it need not exist beforehand (default 'solver_output.cnf').")
-ARGPARSER.add_argument("-r", "--readablecnf", type=str, default=None, help="If provided, a human-readable version of the generated CNF will be saved to this file.")
+ARGPARSER.add_argument("-s", "--maxsteps", type=int, metavar="MAXSTEPS", default=50, help="Maximum number of steps to search for a solution (default 50).")
+ARGPARSER.add_argument("-i", "--input", type=str, metavar="FILENAME", default="solver_input.cnf", help="File where the input for MiniSat will be stored. The file will be created/overwritten, so it need not exist beforehand (default 'solver_input.cnf').")
+ARGPARSER.add_argument("-o", "--output", type=str, metavar="FILENAME", default="solver_output.cnf", help="File where the output from MiniSat will be stored. The file will be created/overwritten, so it need not exist beforehand (default 'solver_output.cnf').")
+ARGPARSER.add_argument("-r", "--readablecnf", type=str, metavar="FILENAME", default=None, help="If provided, a human-readable version of the generated CNF will be saved to this file.")
 
 
 
@@ -653,9 +653,6 @@ if __name__ == "__main__":
         print(f"Error: {e}")
         exit(1)
 
-    if args.readablecnf is not None:
-        planner.save_readable_cnf(args.readablecnf)
-
     solution = planner.find_solution()
 
     if solution is None:
@@ -664,3 +661,6 @@ if __name__ == "__main__":
         print("Solution found:")
         for action in solution:
             print(action)
+
+    if args.readablecnf is not None:
+        planner.save_readable_cnf(args.readablecnf)
