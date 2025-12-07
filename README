@@ -1,0 +1,128 @@
+# Sokoban SAT Planner
+
+This project implements a Sokoban puzzle solver based on SAT planning. It reads Sokoban map from a text file, compiles it into a propositional planning task (CNF), and runs an external SAT solver (MiniSat) repeatedly to search for the shortest plan.
+
+
+## Requirements
+
+- **Python 3.7+**
+
+- **NumPy** library
+
+- **MiniSat solver binary** (you will need to provide a path to an external MiniSat executable)
+
+
+## Command-Line Usage
+
+Run the solver as:
+
+```
+python sokoban.py [-h] [-s MAXSTEPS] [-i FILENAME] [-o FILENAME] [-r FILENAME] mapfile minisat
+```
+
+### Positional arguments
+
+| Argument | Description |
+|----------|-------------|
+| `mapfile` | Path to the Sokoban map file. |
+| `minisat` | Path to the MiniSat executable. |
+
+### Options
+
+| Switch | Description | Default |
+|-|-|-|
+| `-h`, `--help` | Show help message and exit. | None |
+| `-s`, `--maxsteps` | Maximum number of steps to search for a solution. | `50` |
+| `-i`, `--input` | File where the input for MiniSat will be stored. The file will be created/overwritten, so it need not exist beforehand. | `solver_input.cnf` |
+| `-o`, `--output` | File where the output from MiniSat will be stored. The file will be created/overwritten, so it need not exist beforehand. | `solver_output.cnf` |
+| `-r`, `--readable` | If provided, a human-readable version of the generated CNF will be saved to this file. | None |
+
+> **Note:** After the script finishes, the file given via `--input` is overwritten with the DIMACS encoding for the last MiniSat invocation. This is either the formula for the maximum number of steps (specified with `--maxsteps`) or, if the planner found a solution sooner, the formula for the minimal step bound at which a solution existed. The same applies to the output file (`--output`) and readable CNF file 
+(`--readable`).
+
+
+### Example usage
+
+```
+python sokoban.py maps/map1.txt /usr/bin/minisat -s 20 -r encoding.txt
+```
+
+## Output
+
+If a solution was found within the given step bound, it prints a sequence of action variables chosen at each step. Description of chosen vocabulary can be found below in section [Vocabulary and Planning Encoding](#vocab).
+
+### Example
+
+Consider following Sokoban map:
+
+```
+######
+#s   #
+#CCCX#
+#X   #
+######
+```
+> **Note:** The map is `map1.txt` from sample maps.
+
+The found solution would be:
+
+
+```
+Solution found:
+push(1,1,down,0)
+move(2,1,up,1)
+move(1,1,right,2)
+move(1,2,right,3)
+move(1,3,right,4)
+move(1,4,down,5)
+move(2,4,down,6)
+move(3,4,left,7)
+move(3,3,left,8)
+push(3,2,up,9)
+push(2,2,right,10)
+move(2,3,up,11)
+push(1,3,left,12)
+```
+
+
+## <a name="vocab"></a>Vocabulary and Planning Encoding
+
+The planner uses a propositional SAT encoding with the following fluents and actions.
+
+### Fluents
+
+All positions are referenced by coordinates `(x,y)` on the Sokoban map grid. All maps are parsed as a rectangle grid, with position `(0,0)` as top-left corner, `x`-coordinate increasing right and `y`-coordinate increasing downward.
+
+#### Static fluents
+
+Tthese do not change over time:
+
+- `wall(x,y)` - cell `(x,y)` contains a wall
+- `storage(x,y)` - cell `(x,y)` contains a storage
+
+Any cell that is neither wall nor storage is ordinary floor.
+
+#### Dynamic fluents
+
+These are indexed by a time step `t`, representing the evolving game state:
+
+- `crate(x,y,t)` - at time step `t`, a cell `(x,y)` contains a crate
+- `sokoban(x,y,t)` - at time step `t`, the player (Sokoban) stands at cell `(x,y)`
+
+
+### Actions
+
+Actions are indexed by time step `t` and represent transitions of states from step `t` to step `t+1` (meaning the first action is assigned step `0`).
+
+- `move(x,y,d,t)` - Sokoban is at position `(x,y)` at time `t` and moves into an adjacent free cell in direction `d` (`up`/`down`/`left`/`right`)
+
+- `push(x,y,d,t)` - Sokoban is at position `(x,y)` at time `t` and pushes a crate located one cell ahead in direction `d`, moving both crate and Sokoban one step (e.g. `push(1,1,right,0)` means the Sokoban is at `(1,1)` and pushes a crate from `(2,1)` to `(3,1)`)
+
+- `noop(t)` - represents "no operation" at time step `t`, (used to pad shorter plans, allowing binary search)
+
+The following table contains preconditions and effects of these actions. Note that `(x',y')` is position one step from `(x,y)` in direction `d`, while `(x'',y'')` is two steps in that direction. Action `noop(t)` does not have any precoditions nor effects.
+
+| Action | Preconditions | Effects |
+|-|-|-|
+| `move(x,y,d,t)` | `sokoban(x,y,t)` <br> `-wall(x',y',t)` <br> `-crate(x',y',t)` | `sokoban(x',y',t+1)` <br> `-sokoban(x,y,t+1)` |
+| `push(x,y,d,t)` | `sokoban(x,y,t)` <br> `crate(x',y',t)` <br> `-wall(x'',y'',t)` <br> `-crate(x'',y'',t)` | `sokoban(x',y',t+1)` <br> `crate(x'',y'',t+1)` <br> `-sokoban(x,y,t+1)` <br> `-crate(x',y',t+1)` |
