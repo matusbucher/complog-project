@@ -33,15 +33,7 @@ class SokobanMap:
     width: int
     grid: List[List[Tile]]
 
-    def __init__(self, height: int, width: int, grid: List[List[Tile]]):
+    def __init__(self, height: int, width: int):
         self.height = height
         self.width = width
-        self.grid = grid
-
-    @staticmethod
-    def empty_map(height: int, width: int) -> SokobanMap:
-        """
-        Create an empty SokobanMap with the given dimensions.
-        """
-        grid: List[List[Tile]] = [[Tile(ground=Ground.FLOOR, map_object=None) for _ in range(width)] for _ in range(height)]
-        return SokobanMap(height=height, width=width, grid=grid)
+        self.grid = [[Tile() for _ in range(width)] for _ in range(height)]

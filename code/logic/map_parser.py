@@ -22,8 +22,8 @@ class MapParser:
     Parse a sokoban map in text representation into a SokobanMap object.
     """
 
-    @classmethod
-    def from_lines(cls, lines: Sequence[str]) -> SokobanMap:
+    @staticmethod
+    def from_lines(lines: Sequence[str]) -> SokobanMap:
         """
         Parse the given lines and return a SokobanMap.
         """
@@ -60,8 +60,8 @@ class MapParser:
 
         return SokobanMap(width=width, height=height, grid=grid)
 
-    @classmethod
-    def from_file(cls, path: PathLike) -> SokobanMap:
+    @staticmethod
+    def from_file(path: PathLike) -> SokobanMap:
         """
         Read the file, parse it and return a SokobanMap.
         """
@@ -72,4 +72,4 @@ class MapParser:
         with p.open("r") as file:
             lines = [line.rstrip("\n") for line in file]
 
-        return cls.from_lines(lines)
+        return MapParser.from_lines(lines)
