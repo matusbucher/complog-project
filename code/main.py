@@ -12,9 +12,9 @@ Dependencies:
 
 import argparse
 
-from logic_program_interface import Action, Solution
-from planner import Planner
-from sokoban_map import Parser, ParserError
+from logic.logic_program_interface import Action, Solution
+from logic.planner import Planner
+from logic.map_parser import MapParser, MapParserError
 
 
 ARGPARSER = argparse.ArgumentParser(
@@ -42,8 +42,8 @@ if __name__ == "__main__":
     args = ARGPARSER.parse_args()
 
     try:
-        sokoban_map = Parser.from_file(args.mapfile)
-    except (FileNotFoundError, ParserError) as e:
+        sokoban_map = MapParser.from_file(args.mapfile)
+    except (FileNotFoundError, MapParserError) as e:
         print(f"Error: {e}")
         exit(1)
 
