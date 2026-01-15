@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox
 from tkinter import filedialog
+from tkhtmlview import HTMLScrolledText
 from typing import Optional, Tuple
 
 from gui.helpers import Settings
@@ -9,6 +10,8 @@ from logic.sokoban_map import SokobanMap
 
 
 SETTING_ICON_PATH = "assets/setting.ico"
+MANUAL_ICON_PATH = "assets/manual.ico"
+MANUAL_HTML_PATH = "docs/manual.html"
 
 
 class DimensionDialog(tk.Toplevel):
@@ -113,6 +116,31 @@ class SettingsDialog(tk.Toplevel):
         self.destroy()
 
 
+class ManualWindow(tk.Toplevel):
+    def __init__(self, parent, manual_path: str):
+        manual_content = ""
+        try:
+            with open(manual_path, "r") as f:
+                manual_content = f.read()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load manual: {e}")
+            return
+        
+        super().__init__(parent)
+        self.title("User Manual")
+        self.iconbitmap(MANUAL_ICON_PATH)
+        self.resizable(True, True)
+        self.grab_set()
+
+        container = tk.Frame(self)
+        container.pack(fill=tk.BOTH, expand=True)
+        viewer = HTMLScrolledText(container, html=manual_content, wrap="word")
+        viewer.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        viewer.configure(state="disabled")
+
+        self.bind("<Escape>", lambda e: self.destroy())
+
+
 class MenuBar:
     def __init__(self, root, parent):
         self._root = root
@@ -197,4 +225,4 @@ class MenuBar:
         self._parent.quit()
     
     def __manual(self) -> None:
-        raise NotImplementedError
+        ManualWindow(self._parent, MANUAL_HTML_PATH)

@@ -3,8 +3,9 @@ GUI planner for Sokoban game solutions. Provides a graphical interface for editi
 
 Dependencies:
 - Python 3.7+
-- Pillow library
 - NumPy library
+- Pillow library
+- tkhtmlview library
 - An external MiniSat solver binary
 """
 

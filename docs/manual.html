@@ -1,0 +1,89 @@
+<h1>USER MANUAL</h1>
+
+<hr>
+
+<h2>Control Panel</h2>
+
+<p>
+The buttons in the control panel on the left side have the following functions:
+</p>
+
+<ul>
+    <li><b>Wall</b>: selects wall tile for placement.</li>
+    <li><b>Floor</b>: selects floor tile for placement.</li>
+    <li><b>Storage</b>: selects storage tile for placement.</li>
+    <li><b>Crate</b>: selects crate for placement.</li>
+    <li><b>Sokoban</b>: selects Sokoban for placement.</li>
+    <li><b>Clear</b>: clears the whole map.</li>
+    <li><b>Edit</b>: switches to edit mode (from solution mode).</li>
+</ul>
+
+<hr>
+
+<h2>Settings</h2>
+
+<p>
+You need to set the path to a MiniSat executable and to a folder for MiniSat input/output files.
+You can configure this by clicking <b>"Settings" -> "Configure"</b>, which opens a settings window.
+You can also enable or disable optimizations in the planning encoding here.
+</p>
+
+<hr>
+
+<h2>Edit Mode</h2>
+
+<p>
+To create a new map, click <b>"Map" -> "New Map"</b> and enter the desired dimensions.
+Maximum map size is 20x20.
+</p>
+
+<p>
+Alternatively, you can load an existing map from a file by clicking
+<b>"Map" -> "Import"</b> and selecting a text file containing the map in the expected format.
+</p>
+
+<p>
+You can then edit the map by selecting tools from the control panel and clicking on the grid
+to place the selected tile or object.
+</p>
+
+<p>
+Use <b>right-click</b> to erase an object on a tile (Sokoban or crate).
+</p>
+
+<p>
+You can export the current map to a text file by clicking
+<b>"Map" -> "Export"</b>.
+</p>
+
+<hr>
+
+<h2>Solution Mode</h2>
+
+<p>
+When the map is ready, click the <b>"Find Solution"</b> button in the solution panel on the right.
+This runs the planner and, if a solution is found, displays the plan.
+</p>
+
+<p>
+Use the <b>"Step Next"</b> and <b>"Step Back"</b> buttons to visualize the solution step-by-step
+on the grid.
+</p>
+
+<p>
+Before clicking <b>"Find Solution"</b>, you can set:
+</p>
+
+<ul>
+    <li>Maximum number of steps</li>
+    <li>Whether the planner should find the shortest solution</li>
+</ul>
+
+<p>
+While in solution mode, the map cannot be edited.
+</p>
+
+<p>
+To return to edit mode, click the <b>"Edit"</b> button in the control panel
+(<i>WARNING: the found plan will be erased</i>).
+</p>

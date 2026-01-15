@@ -10,6 +10,7 @@ It comes with both command-line interface and GUI (Tkinter-based) for visualizin
 - **Python 3.7+**
 - **NumPy library**
 - **Pillow library** (only for GUI)
+- **tkhtmlview library** (only for GUI)
 - **MiniSat solver binary** (you will need to provide a path to an external MiniSat executable)
 
 
@@ -130,7 +131,7 @@ The buttons in the control panel on the left side have the following functions:
 | <img src="assets/crate.png" alt="drawing" width="40"> | Crate | Selects crate for placement. |
 | <img src="assets/sokoban.png" alt="drawing" width="40"> | Sokoban | Selects Sokoban for placement. |
 | <img src="assets/clear.png" alt="drawing" width="40"> | Clear | Clears the whole map. |
-| <img src="assets/edit.png" alt="drawing" width="40"> | Edit | Switch to edit mode (from solution mode). |
+| <img src="assets/edit.png" alt="drawing" width="40"> | Edit | Switches to edit mode (from solution mode). |
 
 
 ### Settings
