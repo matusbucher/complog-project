@@ -123,8 +123,13 @@ class LogicProgramBasic(LogicProgramInterface):
         solution : Solution = []
         for lit in literals:
             if lit > 0 and lit in self._action_map:
-                solution.append(self._action_map[lit])
-        solution.sort(key=lambda x: x[4])  # Sort by step
+                step = self._action_map[lit]
+                if step.action != Action.NOOP:
+                    solution.append(step)
+
+        solution.sort(key=lambda x: x.step)
+        for i in range(len(solution)):
+            solution[i].step = i + 1
         return solution
 
     @classmethod
@@ -184,21 +189,21 @@ class LogicProgramBasic(LogicProgramInterface):
         if (x, y, direction, step) not in self._move_vars:
             lit = self.__new_variable(LogicProgramBasic.__move(x, y, direction, step))
             self._move_vars[(x, y, direction, step)] = lit
-            self._action_map[lit] = (Action.MOVE, x, y, direction, step)
+            self._action_map[lit] = SolutionStep(Action.MOVE, x, y, direction, step)
         return self._move_vars[(x, y, direction, step)]
     
     def __push_var(self, x: int, y: int, direction: Direction, step: int) -> int:
         if (x, y, direction, step) not in self._push_vars:
             lit = self.__new_variable(LogicProgramBasic.__push(x, y, direction, step))
             self._push_vars[(x, y, direction, step)] = lit
-            self._action_map[lit] = (Action.PUSH, x, y, direction, step)
+            self._action_map[lit] = SolutionStep(Action.PUSH, x, y, direction, step)
         return self._push_vars[(x, y, direction, step)]
     
     def __noop_var(self, step: int) -> int:
         if step not in self._noop_vars:
             lit = self.__new_variable(LogicProgramBasic.__noop(step))
             self._noop_vars[step] = lit
-            self._action_map[lit] = (Action.NOOP, 0, 0, Direction.UP, step)
+            self._action_map[lit] = SolutionStep(Action.NOOP, 0, 0, Direction.UP, step)
         return self._noop_vars[step]
     
     def __valid_coords(self, x: int, y: int) -> bool:

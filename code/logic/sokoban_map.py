@@ -33,7 +33,25 @@ class SokobanMap:
     width: int
     grid: List[List[Tile]]
 
-    def __init__(self, height: int, width: int):
+    def __init__(self, height: int, width: int, grid: Optional[List[List[Tile]]] = None):
+        if grid is not None:
+            self.grid = grid
+            if len(grid) != height or any(len(row) != width for row in grid):
+                raise ValueError("Grid dimensions do not match specified height and width.")
+        else:
+            self.grid = [[Tile() for _ in range(width)] for _ in range(height)]
         self.height = height
         self.width = width
-        self.grid = [[Tile() for _ in range(width)] for _ in range(height)]
+    
+    def valid_map(self) -> bool:
+        """
+        Check if the Sokoban map is valid. A valid map must have exactly one Sokoban.
+        """
+        sokoban_count = 0
+
+        for row in self.grid:
+            for tile in row:
+                if tile.map_object == MapObject.SOKOBAN:
+                    sokoban_count += 1
+
+        return sokoban_count == 1

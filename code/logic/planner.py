@@ -62,8 +62,25 @@ class Planner():
         )
         
         return result.returncode == 10
+    
+    def find_any_solution(self) -> Optional[Solution]:
+        """
+        Find a solution by calling the MiniSat solver once. If found, return a list of ordered actions.
+        """
+        self._logic_program.set_goal(self._logic_program.get_max_steps()).save_dimacs(self._solver_input)
+        
+        result = subprocess.run(
+            [self._solver_path, self._solver_input, self._solver_output],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 10:
+            return None
+        
+        return self.__parse_solution()
 
-    def find_shortest_solution(self) -> Solution:
+    def find_shortest_solution(self) -> Optional[Solution]:
         """
         Search for a shortest plan by calling the MiniSat solver repeatedly. If found, return a list of ordered actions.
         """

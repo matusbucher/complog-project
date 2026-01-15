@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 from typing import List, Dict, Tuple, Optional, Union
 
-from logic.logic_program_interface import Action, Direction, LogicProgramInterface, Solution
+from logic.logic_program_interface import Action, Direction, LogicProgramInterface, Solution, SolutionStep
 from logic.sokoban_map import MapObject, SokobanMap, Ground
 
 
@@ -157,7 +157,12 @@ class LogicProgramOptimized(LogicProgramInterface):
         
         solution: Solution = []
         for step in range(self._goal_step):
-            solution.append((actions[step], argXs[step], argYs[step], argDs[step], step))
+            if actions[step] != Action.NOOP:
+                solution.append(SolutionStep(actions[step], argXs[step], argYs[step], argDs[step], step))
+        
+        solution.sort(key=lambda x: x.step)
+        for i in range(len(solution)):
+            solution[i].step = i + 1
         return solution
 
     @classmethod
@@ -269,7 +274,7 @@ class LogicProgramOptimized(LogicProgramInterface):
                 c = self.__crate_var(x, y, 0)
 
                 # Static facts: whether a cell is a floor/wall/storage.
-                match self._sokoban_map.grid[x][y]:
+                match self._sokoban_map.grid[x][y].ground:
                     case Ground.FLOOR:
                         self._init_state.append(-w)
                         self._init_state.append(-st)

@@ -76,10 +76,32 @@ class Direction(Enum):
                 return np.array([0, -1])
             case Direction.DOWN:
                 return np.array([1, 0])
+            
+class SolutionStep:
+    """
+    A single step in a solution plan.
+    """
+    action : Action
+    x : int
+    y : int
+    direction : Direction
+    step : int
+
+    def __init__(self, action: Action, x: int, y: int, direction: Direction, step: int):
+        self.action = action
+        self.x = x
+        self.y = y
+        self.direction = direction
+        self.step = step
+
+    def to_string(self) -> str:
+        """
+        Return a human-readable string representing the solution step.
+        """
+        return f"{self.step}: {self.action.to_string()} {self.direction.to_string()} from ({self.x}, {self.y})"
 
         
 PathLike = Union[str, Path]
-SolutionStep = Tuple[Action, int, int, Direction, int]
 Solution = Optional[List[SolutionStep]]
 
 

@@ -73,3 +73,34 @@ class MapParser:
             lines = [line.rstrip("\n") for line in file]
 
         return MapParser.from_lines(lines)
+    
+    @staticmethod
+    def map_to_lines(sokoban_map: SokobanMap) -> List[str]:
+        """
+        Convert a SokobanMap back to its text representation.
+        """
+        lines: List[str] = []
+        for i in range(sokoban_map.height):
+            line_chars: List[str] = []
+            for j in range(sokoban_map.width):
+                tile = sokoban_map.grid[i][j]
+                ch: str = " "
+                if tile.ground == Ground.WALL:
+                    ch = WALL_CHAR
+                elif tile.ground == Ground.STORAGE:
+                    if tile.map_object == MapObject.CRATE:
+                        ch = "c"
+                    elif tile.map_object == MapObject.SOKOBAN:
+                        ch = "s"
+                    else:
+                        ch = "X"
+                else:  # Floor
+                    if tile.map_object == MapObject.CRATE:
+                        ch = "C"
+                    elif tile.map_object == MapObject.SOKOBAN:
+                        ch = "S"
+                    else:
+                        ch = " "
+                line_chars.append(ch)
+            lines.append("".join(line_chars).rstrip())
+        return lines
