@@ -8,10 +8,14 @@ from logic.map_parser import MapParser
 from logic.sokoban_map import SokobanMap
 
 
+SETTING_ICON_PATH = "assets/setting.ico"
+
+
 class DimensionDialog(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("Enter Dimensions")
+        self.iconbitmap(SETTING_ICON_PATH)
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
@@ -24,8 +28,8 @@ class DimensionDialog(tk.Toplevel):
         self.width_var = tk.StringVar()
         self.height_var = tk.StringVar()
 
-        tk.Entry(self, textvariable=self.width_var).grid(row=0, column=1, padx=10, pady=5)
-        tk.Entry(self, textvariable=self.height_var).grid(row=1, column=1, padx=10, pady=5)
+        tk.Entry(self, textvariable=self.width_var, width=5).grid(row=0, column=1, padx=10, pady=5)
+        tk.Entry(self, textvariable=self.height_var, width=5).grid(row=1, column=1, padx=10, pady=5)
 
         button_frame = tk.Frame(self)
         button_frame.grid(row=2, column=0, columnspan=2, pady=10)
@@ -53,6 +57,7 @@ class SettingsDialog(tk.Toplevel):
     def __init__(self, parent, old_settings: Settings = None):
         super().__init__(parent)
         self.title("Settings Configuration")
+        self.iconbitmap(SETTING_ICON_PATH)
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
@@ -117,8 +122,8 @@ class MenuBar:
         self._map_menu : tk.Menu = tk.Menu(self._bar, tearoff=0)
         self._bar.add_cascade(label="Map", menu=self._map_menu)
         self._map_menu.add_command(label="New Map", command=self.__new_map)
-        self._map_menu.add_command(label="Load Map", command=self.__load_map)
-        self._map_menu.add_command(label="Export Map", command=self.__export_map)
+        self._map_menu.add_command(label="Import", command=self.__import_map)
+        self._map_menu.add_command(label="Export", command=self.__export_map)
         self._map_menu.add_separator()
         self._map_menu.add_command(label="Exit", command=self.__exit)
      
@@ -148,9 +153,9 @@ class MenuBar:
         width, height = dialog.result
         self._root.set_map(SokobanMap(height, width))
             
-    def __load_map(self) -> None:
+    def __import_map(self) -> None:
         file = filedialog.askopenfilename(
-            title="Load Sokoban Map",
+            title="Import Sokoban Map",
             filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")]
         )
 

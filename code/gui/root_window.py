@@ -10,7 +10,7 @@ from gui.map_grid import MapGrid
 from gui.solution_panel import SolutionPanel
 
 
-ICON_PATH = "code/assets/sokoban.ico"
+ICON_PATH = "assets/sokoban.ico"
 CANVAS_SIZE = 600
 
 

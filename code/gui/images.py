@@ -6,18 +6,18 @@ from logic.sokoban_map import MapObject, Ground
 
 
 MAP_OBJECT_IMAGE_PATHS : Dict[MapObject, str] = {
-    MapObject.CRATE: "code/assets/crate.png",
-    MapObject.SOKOBAN: "code/assets/sokoban.png",
+    MapObject.CRATE: "assets/crate.png",
+    MapObject.SOKOBAN: "assets/sokoban.png",
 }
 
 GROUND_IMAGE_PATHS : Dict[Ground, str] = {
-    Ground.FLOOR: "code/assets/floor.png",
-    Ground.WALL: "code/assets/wall.png",
-    Ground.STORAGE: "code/assets/storage.png",
+    Ground.FLOOR: "assets/floor.png",
+    Ground.WALL: "assets/wall.png",
+    Ground.STORAGE: "assets/storage.png",
 }
 
-CLEAR_IMAGE_PATH : str = "code/assets/clear.png"
-EDIT_IMAGE_PATH : str = "code/assets/edit.png"
+CLEAR_IMAGE_PATH : str = "assets/clear.png"
+EDIT_IMAGE_PATH : str = "assets/edit.png"
 
 def load_ground_images() -> Dict[Ground, Image.Image]:
     images : Dict[Ground, Image.Image] = {}
