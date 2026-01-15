@@ -1,9 +1,6 @@
 """
 GUI planner for Sokoban game solutions. Provides a graphical interface for editing Sokoban maps (together with import/export), founding solutions via an external MiniSat solver, and step-by-step visualization of the found solutions.
 
-Usage (CLI):
-    python sokoban_gui.py
-
 Dependencies:
 - Python 3.7+
 - Pillow library

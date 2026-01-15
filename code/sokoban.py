@@ -1,9 +1,6 @@
 """
 Command-line planner for Sokoban game solutions. Provides parsing of textual maps, compilation to a SAT planning encoding, solving via an external MiniSat solver, and interpreting the solution.
 
-Usage (CLI):
-    python sokoban.py [-s MAXSTEPS] [-i input] [-o output] [-r readablecnf] <mapfile> <minisat-path>
-
 Dependencies:
 - Python 3.7+
 - NumPy library
@@ -18,7 +15,7 @@ from logic.map_parser import MapParser, MapParserError
 
 
 ARGPARSER = argparse.ArgumentParser(
-    prog="python sokoban.py",
+    prog="python code/sokoban.py",
     description="Solver for Sokoban game using SAT planning.")    
 
 ARGPARSER.add_argument("mapfile", type=str, help="Path to the Sokoban map file.")
@@ -59,7 +56,7 @@ if __name__ == "__main__":
         print("Problem is solvable, searching for shortest solution.")
         solution = planner.find_shortest_solution()
         for step in solution:
-            print(step)
+            print(step.to_string())
 
     if args.readablecnf is not None:
         planner.save_readable_cnf(args.readablecnf)
