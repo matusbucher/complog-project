@@ -1,6 +1,6 @@
 from __future__ import annotations
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 
 class Ground(Enum):
@@ -43,15 +43,21 @@ class SokobanMap:
         self.height = height
         self.width = width
     
-    def valid_map(self) -> bool:
+    def valid_map(self) -> Tuple[bool, bool]:
         """
-        Check if the Sokoban map is valid. A valid map must have exactly one Sokoban.
+        Check if the Sokoban map is valid. Returns a tuple (has_one_sokoban, crates_equal_storage).
         """
         sokoban_count = 0
+        crate_count = 0
+        storage_count = 0
 
         for row in self.grid:
             for tile in row:
                 if tile.map_object == MapObject.SOKOBAN:
                     sokoban_count += 1
+                elif tile.map_object == MapObject.CRATE:
+                    crate_count += 1
+                if tile.ground == Ground.STORAGE:
+                    storage_count += 1
 
-        return sokoban_count == 1
+        return sokoban_count == 1, crate_count == storage_count

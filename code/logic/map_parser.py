@@ -32,7 +32,6 @@ class MapParser:
         height = len(lines)
         width = max(len(line) for line in lines)
 
-        seen_sokoban: bool = False
         for line in lines:
             row: List[Tile] = []
             for i in range(width):
@@ -47,17 +46,11 @@ class MapParser:
 
                 if ch in CRATE_CHARS:
                     tile.map_object = MapObject.CRATE
-                if ch in SOKOBAN_CHARS:
-                    if seen_sokoban:
-                        raise MapParserError(f"Map contains more than one sokoban player.")
-                    seen_sokoban = True
+                elif ch in SOKOBAN_CHARS:
                     tile.map_object = MapObject.SOKOBAN
                 row.append(tile)
             grid.append(row)
         
-        if not seen_sokoban:
-            raise MapParserError("Map does not contain a sokoban player.")
-
         return SokobanMap(width=width, height=height, grid=grid)
 
     @staticmethod

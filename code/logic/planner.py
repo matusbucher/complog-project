@@ -31,6 +31,13 @@ class Planner():
         :param solver_output: Path to the file where the MiniSat output will be written.
         :param optimized: Whether to use the optimized logic program or the basic one.
         """
+        has_one_sokoban, crates_equal_storage = sokoban_map.valid_map()
+        if not has_one_sokoban:
+            raise ValueError("Sokoban map must contain exactly one Sokoban.")
+        
+        if not crates_equal_storage:
+            raise ValueError("Number of crates must equal number of storage locations.")
+
         if solver_path is None or not os.path.isfile(solver_path):
             raise FileNotFoundError(f"MiniSat binary not found at path: {solver_path!s}")
         
