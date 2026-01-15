@@ -98,7 +98,7 @@ class SolutionStep:
         """
         Return a human-readable string representing the solution step.
         """
-        return f"{self.step}: {self.action.to_string()} {self.direction.to_string()} from ({self.x}, {self.y})"
+        return f"{self.step}: {self.action.to_string()} {self.direction.to_string()} from [{self.x},{self.y}]"
 
         
 PathLike = Union[str, Path]
