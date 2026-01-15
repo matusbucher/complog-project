@@ -1,8 +1,8 @@
 """
-Planner for Sokoban game solutions. Provides parsing of textual maps, compilation to a SAT planning encoding, solving via an external MiniSat solver, and interpreting the solution.
+Command-line planner for Sokoban game solutions. Provides parsing of textual maps, compilation to a SAT planning encoding, solving via an external MiniSat solver, and interpreting the solution.
 
 Usage (CLI):
-    python main.py [-s MAXSTEPS] [-i input] [-o output] [-r readablecnf] <mapfile> <minisat-path>
+    python sokoban.py [-s MAXSTEPS] [-i input] [-o output] [-r readablecnf] <mapfile> <minisat-path>
 
 Dependencies:
 - Python 3.7+
@@ -18,7 +18,7 @@ from logic.map_parser import MapParser, MapParserError
 
 
 ARGPARSER = argparse.ArgumentParser(
-    prog="python main.py",
+    prog="python sokoban.py",
     description="Solver for Sokoban game using SAT planning.")    
 
 ARGPARSER.add_argument("mapfile", type=str, help="Path to the Sokoban map file.")
@@ -28,14 +28,6 @@ ARGPARSER.add_argument("-s", "--maxsteps", type=int, metavar="MAXSTEPS", default
 ARGPARSER.add_argument("-i", "--input", type=str, metavar="FILENAME", default="solver_input.cnf", help="File where the input for MiniSat will be stored. The file will be created/overwritten, so it need not exist beforehand (default 'solver_input.cnf').")
 ARGPARSER.add_argument("-o", "--output", type=str, metavar="FILENAME", default="solver_output.cnf", help="File where the output from MiniSat will be stored. The file will be created/overwritten, so it need not exist beforehand (default 'solver_output.cnf').")
 ARGPARSER.add_argument("-r", "--readablecnf", type=str, metavar="FILENAME", default=None, help="If provided, a human-readable version of the generated CNF will be saved to this file.")
-
-
-def print_solution(solution: Solution) -> None:
-    for action, x, y, direction, step in solution:
-        if action == Action.NOOP:
-            print(f"Step {step}: noop")
-        else:
-            print(f"Step {step}: {action.to_string()} {direction.to_string()} from ({x}, {y})")
 
 
 if __name__ == "__main__":
@@ -66,7 +58,8 @@ if __name__ == "__main__":
     else:
         print("Problem is solvable, searching for shortest solution.")
         solution = planner.find_shortest_solution()
-        print_solution(solution)
+        for step in solution:
+            print(step)
 
     if args.readablecnf is not None:
         planner.save_readable_cnf(args.readablecnf)
