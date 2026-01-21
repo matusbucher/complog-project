@@ -1,6 +1,9 @@
 __pycache__/
+.vscode/
 minisat/
 debug/
+build/
 sokoban_assets/
 maps/
-*.cnf
+tstex_modules/
+test.py

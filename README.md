@@ -19,7 +19,7 @@ It comes with both command-line interface and GUI (Tkinter-based) for visualizin
 Run the solver as:
 
 ```
-python code/sokoban.py [-h] [-O] [-s MAXSTEPS] [-i FILENAME] [-o FILENAME] [-r FILENAME] mapfile minisat
+python code/sokoban.py [-h] [-O] [-d] [-s MAXSTEPS] [-i FILENAME] [-o FILENAME] [-r FILENAME] mapfile minisat
 ```
 
 ### Positional arguments
@@ -35,6 +35,7 @@ python code/sokoban.py [-h] [-O] [-s MAXSTEPS] [-i FILENAME] [-o FILENAME] [-r F
 |-|-|-|
 | `-h`, `--help` | Show help message and exit. | None |
 | `-O`, `--optimize` | Enable optimizations in the planning encoding. | None |
+| `-d`, `--debug` | Print number of variables and clauses. | None |
 | `-s`, `--maxsteps` | Maximum number of steps to search for a solution. | `50` |
 | `-i`, `--input` | File where the input for MiniSat will be stored. The file will be created/overwritten, so it need not exist beforehand. | `solver_input.cnf` |
 | `-o`, `--output` | File where the output from MiniSat will be stored. The file will be created/overwritten, so it need not exist beforehand. | `solver_output.cnf` |

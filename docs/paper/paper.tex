@@ -1,0 +1,566 @@
+\documentclass[runningheads]{llncs}
+
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{parskip}
+
+\lstset{basicstyle=\ttfamily}
+
+\usepackage{makecell}
+\usepackage{multirow}
+\usepackage{cellspace}
+\setlength{\cellspacetoplimit}{3pt}
+\setlength{\cellspacebottomlimit}{3pt}
+\addtolength{\tabcolsep}{3pt}
+
+\newcommand{\adj}{\text{adj}}
+\newcommand{\move}{\texttt{move}}
+\newcommand{\push}{\texttt{push}}
+\newcommand{\noop}{\texttt{noop}}
+\newcommand{\wallvar}[1]{\texttt{wall(#1)}}
+\newcommand{\storagevar}[1]{\texttt{storage(#1)}}
+\newcommand{\cratevar}[1]{\texttt{crate(#1)}}
+\newcommand{\sokobanvar}[1]{\texttt{sokoban(#1)}}
+\newcommand{\movevar}[1]{\texttt{move(#1)}}
+\newcommand{\pushvar}[1]{\texttt{push(#1)}}
+\newcommand{\noopvar}[1]{\texttt{noop(#1)}}
+\newcommand{\sXvar}[1]{\texttt{sokoban\_X(#1)}}
+\newcommand{\sYvar}[1]{\texttt{sokoban\_Y(#1)}}
+\newcommand{\actionvar}[1]{\texttt{action(#1)}}
+\newcommand{\argXvar}[1]{\texttt{arg\_X(#1)}}
+\newcommand{\argYvar}[1]{\texttt{arg\_Y(#1)}}
+\newcommand{\argDvar}[1]{\texttt{arg\_D(#1)}}
+
+
+\title{Sokoban Game Planner}
+\subtitle{Computational Logic Project Report}
+\author{Matus Bucher}
+\institute{Comenius University in Bratislava, \\ Faculty of Mathematics, Physics and Informatics}
+\date{\today}
+
+
+\begin{document}
+
+\maketitle
+
+\noindent
+\textbf{GitHub Repository:} \href{https://github.com/matusbucher/complog-project}{github.com/matusbucher/complog-project}
+
+\begin{abstract}
+This report presents a computational logic approach to solving the Sokoban game planning problem. We formulate the problem as a STRIPS planning task and suggest a suitable SAT encoding together with possible optimizations. At the end, we discuss the implementation details and compare the performance of basic and optimized encodings.
+\end{abstract}
+
+
+\section{Introduction}
+\label{sec:intro}
+
+Sokoban is a classic puzzle game where the player (Sokoban) pushes crates onto designated goal locations (storages) within a confined space. A map is represented as a grid consisting of floor, wall and storage cells with crates and the Sokoban placed somewhere on the map. The Sokoban can move in four directions (up, down, left, right) and can push a crate if there is an empty cell behind it (no wall or another crate). The objective is to push all crates onto the storage cells using a sequence of valid moves.
+
+The goal of this project was to find a solution for an arbitrary Sokoban map using computational logic techniques, specifically STRIPS planning and its SAT encoding. It is also required to find the optimal solution, i.e., the shortest sequence of moves that solves the puzzle (or one of the shortest). To automate the process, we implemented a Python script that parses the input map from a text file, generates the SAT encoding in DIMACS format, invoke an external MiniSAT solver, and decodes the solution back to a sequence of moves. Additionally, we developed a simple Tkinter GUI application to visualize the solution step-by-step. The app also contains a built-in map editor for creating custom Sokoban maps.
+
+In this paper, we describe the chosen vocabulary for the STRIPS representation of the Sokoban planning problem, the SAT encoding, and optimizations applied to reduce the size of the generated formula. We briefly mention implementation details and compare the performance of basic and optimized encodings.
+
+
+\section{Map Description}
+\label{sec:map}
+Before we define the STRIPS representation and describe the SAT encoding, we need to clarify what is a valid Sokoban map. As we mentioned earlier, the map consists of different types of cells:
+
+\begin{itemize}
+\item \textbf{wall} -- an impassable cell that neither the Sokoban nor crates can occupy or move through;
+\item \textbf{floor} -- a regular cell that can be occupied by the Sokoban or crates;
+\item \textbf{storage} -- a designated goal location where crates need to be pushed.
+\end{itemize}
+
+For simplicity, we will consider all maps to be rectangular grids. If a map is not rectangular, we can transform it into a rectangular one by padding the shorter rows with floor cells.
+
+Map contains a number of crates and exactly one Sokoban. We will also assume that the number of storage cells is equal to the number of crates. Any map that does not satisfy these conditions is considered invalid.
+
+
+\subsection{Text Representation}
+\label{sec:text-map}
+
+To be able to save Sokoban maps in text files, we need a simple text representation. Each line in the text file corresponds to a row on the map, and each character represents a cell (possibly with an entity) on the map. We will use the following characters:
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{|Sc|Sl|Sc|Sl|}
+\hline
+\textbf{Char} & \textbf{Description} & \textbf{Char} & \textbf{Description} \\
+\hline \texttt{S} & Sokoban on floor & \texttt{s} & Sokoban on storage \\
+\hline \texttt{C} & crate on floor & \texttt{c} & crate on storage \\
+\hline \texttt{X} & storage & \texttt{\#} & wall \\
+\hline space & floor &  &  \\
+\hline
+\end{tabular}
+\vspace{10pt}
+\caption{Text representation of Sokoban map}
+\label{tab:text-rep}
+\end{table}
+
+See maps in Appendix~\ref{sec:appendix-maps} for some examples.
+
+
+\section{STRIPS Representation}
+\label{sec:problem}
+
+First, we need to define fluents and actions which describe the Sokoban game effectively. Let the given map be of size $M \times N$, where $M$ corresponds to the number of rows and $N$ to the number of columns. Each cell on the grid can be identified by its coordinates $(x, y)$, where $0 \leq x < M$ and $0 \leq y < N$. We define the following fluents:
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{|Sl|Sl|}
+\hline
+\textbf{Fluent} & \textbf{Description} \\
+\hline
+\wallvar{x,y} & Cell at coordinates $(x, y)$ is a wall. \\
+\hline
+\storagevar{x,y} & Cell at coordinates $(x, y)$ is a storage location. \\
+\hline
+\cratevar{x,y} & There is a crate at coordinates $(x, y)$. \\
+\hline
+\sokobanvar{x,y} & The Sokoban is at coordinates $(x, y)$. \\
+\hline
+\end{tabular}
+\vspace{10pt}
+\caption{Description of fluents}
+\label{tab:fluents}
+\end{table}
+
+We dont't need a fluent for floor cell since it is inferred by the absence of fluents \texttt{wall(x,y)} and \texttt{storage(x,y)}. Next, we define the actions:
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{|Sl|Sl|}
+\hline
+\textbf{Action} & \textbf{Description} \\
+\hline
+\movevar{x,y,d} & Sokoban moves from $(x, y)$ to an adjacent cell in direction $d$. \\
+\hline
+\pushvar{x,y,d} & \makecell[l]{Sokoban moves from $(x, y)$ to an adjacent cell in direction $d$ while \\pushing a crate (the crate is on the cell Sokoban is moving to).} \\
+\hline
+\end{tabular}
+\vspace{10pt}
+\caption{Description of actions}
+\label{tab:actions}
+\end{table}
+
+Direction $d$ used in the actions can take one of the values \texttt{up}, \texttt{down}, \texttt{left}, \texttt{right}. The preconditions and effects of these actions are defined as follows:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|Sl|Sl|Sl|Sl|}
+\hline
+\textbf{Action} & \textbf{Preconditions} & \textbf{Add Effects} & \textbf{Delete Effects} \\
+\hline
+\movevar{x,y,d} & \makecell[l]{\sokobanvar{x,y}, \\ \texttt{-}\wallvar{x',y'}, \\ \texttt{-}\cratevar{x',y'}} & \makecell[l]{\sokobanvar{x',y'}} & \makecell[l]{\sokobanvar{x,y}} \\
+\hline
+\pushvar{x,y,d} & \makecell[l]{\sokobanvar{x,y}, \\ \cratevar{x',y'}, \\ \texttt{-}\wallvar{x'',y''}, \\ \texttt{-}\cratevar{x'',y''}} & \makecell[l]{\sokobanvar{x',y'}, \\ \cratevar{x'',y''}} & \makecell[l]{\sokobanvar{x,y}, \\ \cratevar{x',y'}} \\
+\hline
+\end{tabular}
+\vspace{10pt}
+\caption{Action preconditions and effects}
+\label{tab:action-preconds-effects}
+\end{table}
+
+Here, $(x', y')$ are the coordinates of the cell adjacent to $(x, y)$ in direction $d$, and $(x'', y'')$ are the coordinates of the cell adjacent to $(x', y')$ in the same direction $d$. If any of these coordinates are out of bounds, the corresponding action is not applicable. That means either forbid such actions or do not include them in the generated formula at all. We will cover this in Section~\ref{sec:encoding}.
+
+We define the initial state $s_0$ by encoding the input map using the defined fluents:
+
+\begin{itemize}
+\item $\{ \wallvar{x,y} \mid \text{cell } (x,y) \text{ is a wall} \} \subseteq s_0$
+\item $\{ \storagevar{x,y} \mid \text{cell } (x,y) \text{ is a storage location} \} \subseteq s_0$
+\item $\{ \cratevar{x,y} \mid \text{cell } (x,y) \text{ contains a crate} \} \subseteq s_0$
+\item $\{ \sokobanvar{x,y} \mid \text{cell } (x,y) \text{ contains the Sokoban} \} \subseteq s_0$
+\end{itemize}
+
+The goal state $g$ is simply defined as
+
+\[ g = \{ \cratevar{x,y} \mid \text{cell } (x,y) \text{ is a storage location} \} \]
+
+
+\section{SAT Encoding}
+\label{sec:encoding}
+
+To encode the defined STRIPS planning problem into SAT, we will use a time-step based approach. We will create propositional variables for fluents and actions at each time step from $0$ to $T$, where $T$ is the maximum number of steps we allow in the plan. The goal is to find the smallest $T$ such that the formula is satisfiable.
+
+Notice that some fluents are not changed by any action -- specifically \texttt{wall(x,y)} and \texttt{storage(x,y)} (this correspond to the fact that map cells are static). Therefore, we do not need to create propositional variables for these fluents at each time step. Instead, we can treat them as constants based on the initial state.
+
+We also need to include \noop\ action (representing no operation at a given time step), which will serve as ``filler'' for longer plans. It has no preconditions and no effects. This addition will allow us to find shortest plan with binary search over $T$.
+
+The set $\mathcal{V}$ of propositional variables will be as follows:
+
+\begin{itemize}
+\item $\wallvar{x,y}, \storagevar{x,y} \in \mathcal{V}$ for all $0 \leq x < M$, $0 \leq y < N$
+\item $\cratevar{x,y,t}, \sokobanvar{x,y,t} \in \mathcal{V}$ for all $0 \leq x < M$, $0 \leq y < N$, $0 \leq t \leq T$
+\item $\movevar{x,y,d,t}, \pushvar{x,y,d,t} \in \mathcal{V}$ for all $0 \leq x < M$, $0 \leq y < N$, $d \in D$, $0 \leq t < T$
+\item $\noopvar{t} \in \mathcal{V}$ for all $0 \leq t < T$
+\end{itemize}
+
+For now, we will also consider invalid actions (e.g., moving out of bounds) and will handle them later.
+
+In the following, we will describe the set of clauses $T$ (we initialize $T := \emptyset$ and gradually add clauses to it). For convenience, we will define function
+$$ \text{adj} : \mathbb{Z} \times \mathbb{Z} \times D \to \mathbb{Z}^2 $$
+which returns the adjacent cell coordinates given a cell and a direction.
+
+
+\subsection{Map Encoding}
+\label{sec:map-encoding}
+
+First, we encode the static fluents which represent the map structure. For each cell $(x, y)$:
+
+\begin{itemize}
+\item $T := T \cup \{ \wallvar{x,y}, \neg \storagevar{x,y} \}$ if the cell is a wall
+\item $T := T \cup \{ \neg \wallvar{x,y}, \storagevar{x,y} \}$ if the cell is a storage
+\item $T := T \cup \{ \neg \wallvar{x,y}, \neg \storagevar{x,y} \}$ if the cell is a floor
+\end{itemize}
+
+
+\subsection{Initial State}
+\label{sec:initial-state}
+
+Next, we encode the initial state of dynamic fluents. For each cell $(x, y)$:
+
+\begin{itemize}
+\item $T := T \cup \{ \cratevar{x,y,0} \}$ if there is a crate on the cell, otherwise $T := T \cup \{ \neg \cratevar{x,y,0} \}$
+\item $T := T \cup \{ \sokobanvar{x,y,0} \}$ if there is the Sokoban on the cell, otherwise $T := T \cup \{ \neg \sokobanvar{x,y,0} \}$
+\end{itemize}
+
+
+\subsection{Goal State}
+\label{sec:goal-state}
+
+For the goal state at time step $T$, we simply do:
+
+\[ T := T \cup \{ \cratevar{x,y,T} \mid \text{cell } (x,y) \text{ is a storage location} \} \]
+
+
+\subsection{Effects of Actions}
+\label{sec:action-effects}
+
+For each action $a_t$ at time step $t$ (where $1 \leq t \leq T$), we need to encode implication $a_t \rightarrow P \land E^+ \land E^-$, where $P$ are the preconditions that must hold in time step $t-1$, $E^+$ are the add effects that must hold in time step $t$, and $E^-$ are the delete effects that must not hold in time step $t$. When converted to CNF, we get the following clauses.
+
+\textbf{Move} -- for each step $t$, cell $(x,y)$, direction $d$ and cell $(x',y') = \adj(x,y,d)$
+\begin{itemize}
+\item if $(x',y')$ is out of bounds, we forbid the action:
+$$ T := T \cup \{ \neg \movevar{x,y,d,t} \} $$
+\item if $(x',y')$ is within bounds, we add:
+\begin{align*}
+T := T \cup \{& \neg \movevar{x,y,d,t} \lor \sokobanvar{x,y,t-1}, \\
+& \neg \movevar{x,y,d,t} \lor \neg \wallvar{x',y'}, \\
+& \neg \movevar{x,y,d,t} \lor \neg \cratevar{x',y',t-1}, \\
+& \neg \movevar{x,y,d,t} \lor \sokobanvar{x',y',t}, \\
+& \neg \movevar{x,y,d,t} \lor \neg \sokobanvar{x,y,t} \}
+\end{align*}
+\end{itemize}
+
+\textbf{Push} -- for each step $t$, cell $(x,y)$, direction $d$ and cells $(x',y') = \adj(x,y,d)$, $(x'',y'') = \adj(x',y',d)$
+\begin{itemize}
+\item if $(x',y')$ or $(x'',y'')$ is out of bounds, we forbid the action:
+$$ T := T \cup \{ \neg \pushvar{x,y,d,t} \} $$
+\item if both $(x',y')$ and $(x'',y'')$ are within bounds, we add:
+\begin{align*}
+T := T \cup \{& \neg \pushvar{x,y,d,t} \lor \sokobanvar{x,y,t-1}, \\
+& \neg \pushvar{x,y,d,t} \lor \cratevar{x',y',t-1}, \\
+& \neg \pushvar{x,y,d,t} \lor \neg \wallvar{x'',y''}, \\
+& \neg \pushvar{x,y,d,t} \lor \neg \cratevar{x'',y'',t-1}, \\
+& \neg \pushvar{x,y,d,t} \lor \sokobanvar{x',y',t}, \\
+& \neg \pushvar{x,y,d,t} \lor \cratevar{x'',y'',t}, \\
+& \neg \pushvar{x,y,d,t} \lor \neg \sokobanvar{x,y,t}, \\
+& \neg \pushvar{x,y,d,t} \lor \neg \cratevar{x',y',t} \}
+\end{align*}
+\end{itemize}
+
+Since \noop\ action has no preconditions or effects, we do not need to add any clauses for it.
+
+
+\subsection{Triggering Actions}
+\label{sec:triggering-actions}
+
+We need to ensure that at each step, exactly one action is taken. In order to have a clean notation, let $A_t$ be the set of all actions at time step $t$ -- \noopvar{t}, \movevar{x,y,d,t}, \pushvar{x,y,d,t} for all $(x,y)$ and $d$. We add the following clauses for each time step $t$:
+
+\begin{itemize}
+\item at least one action is taken:
+$$ T := T \cup \left\{ \bigvee_{a \in A_t} a \right\} $$
+\item at most one action is taken:
+$$ T := T \cup \left\{ \neg a_i \lor \neg a_j \mid a_i, a_j \in A_t, a_i \neq a_j \right\} $$
+\end{itemize}
+
+
+\subsection{Frame Axioms}
+\label{sec:frame-axioms}
+
+We chose the explanatory approach, since actions only change a small number of fluents. Fluents which can change between steps are \texttt{crate} and \texttt{sokoban}. Therefore, for each time step $t$ (where $1 \leq t \leq T$) and each cell $(x,y)$, we need to examine four cases.
+
+\begin{itemize}
+
+\item $\sokobanvar{x,y,t-1} \land \neg \sokobanvar{x,y,t}$ (Sokoban dissappears from cell)
+\begin{itemize}
+\item could be due to \movevar{x,y,d,t} or \pushvar{x,y,d,t} for some direction $d$:
+\begin{align*}
+T := T \cup \biggl\{ & \neg \sokobanvar{x,y,t-1} \lor \sokobanvar{x,y,t} \lor \\
+& \bigvee_{d \in D} \left( \movevar{x,y,d,t} \lor \pushvar{x,y,d,t} \right) \biggr\}
+\end{align*}
+\end{itemize}
+
+\item $\neg \sokobanvar{x,y,t-1} \land \sokobanvar{x,y,t}$ (Sokoban appears on cell)
+\begin{itemize}
+\item could be due to \movevar{x',y',d,t} or \pushvar{x',y',d,t} for some cell $(x',y')$ and direction $d$ such that $\adj(x',y',d) = (x,y)$ and $(x',y')$ is within bounds
+\item let $S \subseteq \mathbb{Z} \times \mathbb{Z} \times D$ be the set of all such cells $(x',y')$ and directions $d$, then:
+\begin{align*}
+T := T \cup \biggl\{ & \sokobanvar{x,y,t-1} \lor \neg \sokobanvar{x,y,t} \lor \\
+& \bigvee_{(x',y',d) \in S} \left( \movevar{x',y',d,t} \lor \pushvar{x',y',d,t} \right) \biggr\}
+\end{align*}
+\end{itemize}
+
+\item $\cratevar{x,y,t-1} \land \neg \cratevar{x,y,t}$ (crate dissappears from cell)
+\begin{itemize}
+\item could be due to \pushvar{x',y',d,t} for some cell $(x',y')$ and direction $d$ such that $\adj(x',y',d) = (x,y)$ and $(x',y')$ is within bounds
+\item let $S \subseteq \mathbb{Z} \times \mathbb{Z} \times D$ be the set of all such cells $(x',y')$ and directions $d$, then:
+\begin{align*}
+T := T \cup \biggl\{ & \neg \cratevar{x,y,t-1} \lor \cratevar{x,y,t} \lor \\
+& \bigvee_{(x',y',d) \in S} \pushvar{x',y',d,t} \biggr\}
+\end{align*}
+\end{itemize}
+
+\item $\neg \cratevar{x,y,t-1} \land \cratevar{x,y,t}$ (crate appears on cell)
+\begin{itemize}
+\item could be due to \pushvar{x'',y'',d,t} for some cell $(x'',y'')$ and direction $d$ such that $\adj(\adj(x'',y'',d),d) = (x,y)$ and $(x'',y'')$ is within bounds
+\item let $S \subseteq \mathbb{Z} \times \mathbb{Z} \times D$ be the set of all such cells $(x'',y'')$ and directions $d$, then:
+\begin{align*}
+T := T \cup \biggl\{ & \cratevar{x,y,t-1} \lor \neg \cratevar{x,y,t} \lor \\
+& \bigvee_{(x'',y'',d) \in S} \pushvar{x'',y'',d,t} \biggr\}
+\end{align*}
+\end{itemize}
+
+\end{itemize}
+
+
+\subsection{Background Knowledge}
+
+Actually, we don't need to add any clauses for background knowledge since our encoding already cover whole logic of Sokoban game. It prevents invalid moves and pushes. Assuming input map is valid, there is no need to add any further constraints.
+
+
+\section{Optimizations}
+\label{sec:optimizations}
+
+The solution described in Section~\ref{sec:encoding} is correct, but is pretty straightforward. It can be further optimized to reduce the number of variables and possibly the number of clauses in the generated formula. In this section, we will explain two optimizations we implemented and also discuss some other optimization suggestions.
+
+
+\subsection{Splitting Sokoban Fluent}
+
+Fluent \sokobanvar{x,y} is actually very inefficient since exactly one such fluent is true at any time step. Instead, we can represent Sokoban's position using two separate fluents -- \sXvar{x} and \sYvar{y}. This way, we reduce the number of variables from $M \times N$ to $M + N$ for each time step.
+
+We need to adjust the action preconditions and effects accordingly. For example, we could just replace variable \sokobanvar{x,y} with conjunction $\sXvar{x} \land \sYvar{y}$ in all formulas (of course, also need to transform it to CNF correctly).
+
+However, this split representation allows us to encode frame axioms for Sokoban more efficiently by considering change in horizontal and vertical position separately. Furthermore, when paired up with the next optimization, we can also encode action preconditions and effect more efficiently.
+
+
+\subsection{Action Overriding}
+
+Number of action variables is also a problem which we can deal with by splitting them into more variables. Both \move and \texttt{push} variables have the same ``arguments'' -- starting cell $(x,y)$ and direction $d$. We may also assume that \noop\ have these arguements but they are ignored. We define new variables:
+
+\begin{itemize}
+\item \actionvar{a,t} -- action type at time step $t$, where $a \in \{ \move, \push, \noop \}$
+\item \argXvar{x,t} -- argument $x$ (cell's row) at time step $t$
+\item \argYvar{y,t} -- argument $y$ (cell's column) at time step $t$
+\item \argDvar{d,t} -- argument $d$ (direction) at time step $t$
+\end{itemize}
+
+Variable \movevar{x,y,d,t} can be then replaced with conjunction
+$$ \actionvar{\move,t} \land \argXvar{x,t} \land \argYvar{y,t} \land \argDvar{d,t} $$
+(similarly for \pushvar{x,y,d,t} and \noopvar{t}). This way, we reduce the number of action variables from $2(4MN) + 1$\footnote{One \noop\ variable and $4 \times M \times N$ variables for both \move\ and \push.} to $3 + M + N + 4$ per time step.
+
+It may and will produce more clauses in some parts of the encoding -- especially in frame axioms, because simple disjunction of actions becomes disjunction of conjuctions of variables, which we need to distribute to convert to CNF. However, we can optimize action preconditions and effects encoding by using this new representation together with split Sokoban fluent.
+
+For example, action $\actionvar{move,t} \land \argXvar{x,t} \land \argDvar{down,t}$ does not depend on $y$ coordinate of Sokoban at all (because it is not changing). Therefore, we can replace precondition $\sokobanvar{x,y,t-1}$ with just $\sXvar{x,t-1}$; same for effects $\neg \sXvar{x,t}$ and $\sXvar{x',t}$. Still, precondition that the target cell is free must be encoded together with $y$ coordinate, because wall and crate variables depend on both coordinates.
+
+Similar effective encoding can be used for explanatory frame axioms for changes in Sokoban splitted fluents. Nevertheless, we will not go into details here -- the idea is again to omit action arguments which are not important.
+
+
+\subsection{Other Suggestions}
+
+Some other possible optimizations which we did not implement but are worth mentioning:
+
+\begin{itemize}
+\item \textbf{prune unreachable actions} -- Some actions are never applicable in any state (e.g., pushing a crate into a wall). We can analyze the map and remove such actions from the encoding entirely. This can significantly reduce the number of action variables and related clauses.
+\item \textbf{binary representation of coordinates} -- Instead of using separate variables for each coordinate, we can represent coordinates in binary form. This can reduce the number of variables needed to represent positions ($\log_2 M$ for rows and $\log_2 N$ for columns), especially for larger maps.
+\item \textbf{action aggregation} -- We could forget about move actions and only consider push actions. We can interpret this as aggregating moves and the next push into a single action. While this reduces expected plan length (thus number of variables and clauses), it is harder to determine which solution is actually the shortest in terms of moves. Also another problem is checking reachability of cells before pushes. We would need to ensure that Sokoban can reach the pushing position from its current position (which would require additional encoding with a lot of variables/clauses). Another approach could be not handling reachability at all and just check if the solution is valid -- if not, we forbid such sequence and try running SAT solver again.
+\end{itemize}
+
+
+\section{Implementation}
+\label{sec:implementation}
+
+The described encoding and optimizations were implemented as Python script. It comes with both command-line interface and simple Tkinter GUI application for visualization of solutions.
+
+The core of both programs is the \texttt{Planner}:
+
+\begin{enumerate}
+\item it takes the input map and initialize \texttt{LogicProgram} with the SAT encoding (either basic or optimized);
+\item saves it to file in DIMACS format;
+\item invokes external MiniSAT solver on the saved file;
+\item parses the output from MiniSAT and decodes it back to a sequence of action variables.
+\end{enumerate}
+
+Both CLI and GUI provide options to set maximum plan length, turn on/off optimizations, choosing input map file, MiniSAT binary path, etc. The GUI application also comes with additional features like step-by-step visualization of the solution and built-in map editor.
+
+
+\subsection{Results}
+
+While the implemented program handles small maps quite well, a little more complex maps are problem even for optimized encoding. For some of them, the program couldn't find solution within hour -- the most of time is spent on generating large encoding files, MiniSAT solver itself usually solves the formula in (milli)seconds. In order to measure ``performance'' even on bigger maps, we compared the size of generated formulas (number of variables and clauses) for fixed number of 20 steps. Tests was done on 8 different maps (see Appendix~\ref{sec:appendix-maps} for map descriptions). Results are summarized in the Table~\ref{tab:results}.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{|Sc|Sc|Sc|Sc|Sc|}
+\hline
+\multirow{2}{*}{\textbf{Map}} & \multicolumn{2}{c|}{\textbf{Basic}} & \multicolumn{2}{c|}{\textbf{Optimized}} \\
+\cline{2-5}
+& \textbf{Variables} & \textbf{Clauses} & \textbf{Variables} & \textbf{Clauses} \\
+\hline
+Map 1 & 6140 & 604223 & 1281 & 52384 \\
+\hline
+Map 2 & 12872 & 2604512 & 2245 & 133405 \\
+\hline
+Map 3 & 14708 & 3392228 & 2493 & 157213 \\
+\hline
+Map 4 & 5528 & 490448 & 1253 & 41493 \\
+\hline
+Map 5 & 5732 & 527572 & 1235 & 46095 \\
+\hline
+Map 6 & 6140 & 604220 & 1281 & 52381 \\
+\hline
+Map 7 & 14708 & 3392228 & 2493 & 157213 \\
+\hline
+Map 8 & 14708 & 3392228 & 2493 & 157213 \\
+\hline
+\end{tabular}
+\vspace{10pt}
+\caption{Comparison of generated formula sizes for basic and optimized encoding (for 20 steps)}
+\label{tab:results}
+\end{table}
+
+We note that even though map 7 and map 8 have the exactly same size of generated formulas, the program could handle only map 8 within reasonable time. This comes from the fact that the solution for map 7 is significantly longer (more than 20 steps) than for map 8 (only 7 steps). To determine unsatisfiability for map 7 with 20 steps, the solver had to explore whole search space, while for map 8 it could find a solution quickly.
+
+From the more complex maps with longer solutions (maps 2, 3, 7), the program found solutions but it took more than 15 minutes.
+
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+In this report, we presented a STRIPS representation and SAT encoding for solving the Sokoban game planning problem. We defined appropriate fluents and actions to model the game mechanics and described a straightforward SAT encoding approach. Furthermore, we proposed and implemented optimizations to reduce the size of the generated formula, which significantly improved size of generated formulas (and thus solving times). We discussed further optimization suggestions that could be explored in future work.
+
+
+\appendix
+
+\section{Test Maps}
+\label{sec:appendix-maps}
+
+The following maps were used for testing and performance evaluation of the implemented Sokoban planner:
+
+\begin{multicols}{3}
+
+\noindent\begin{minipage}{\linewidth}
+\textbf{Map 1}
+\begin{lstlisting}
+######
+#s   #
+#CCCX#
+#X   #
+######
+\end{lstlisting}
+\end{minipage}
+
+\noindent\begin{minipage}{\linewidth}
+\textbf{Map 2}
+\begin{lstlisting}
+#########
+#       #
+# CCSCC #
+#   X   #
+#  X X  #
+#   X   #
+#########
+\end{lstlisting}
+\end{minipage}
+
+\noindent\begin{minipage}{\linewidth}
+\textbf{Map 3}
+\begin{lstlisting}
+#########
+# C   cX#
+#  C #XX#
+# C  #  #
+#  ##S  #
+#       #
+#  ###  #
+#########
+\end{lstlisting}
+\end{minipage}
+
+\noindent\begin{minipage}{\linewidth}
+\textbf{Map 4}
+\begin{lstlisting}
+#########
+#S  C  X#
+#########
+\end{lstlisting}
+\end{minipage}
+
+\noindent\begin{minipage}{\linewidth}
+\textbf{Map 5}
+\begin{lstlisting}
+#######
+#S C X#
+#X C  #
+#######
+\end{lstlisting}
+\end{minipage}
+
+\noindent\begin{minipage}{\linewidth}
+\textbf{Map 6}
+\begin{lstlisting}
+######
+#XSCX#
+#C C #
+#  X #
+######
+\end{lstlisting}
+\end{minipage}
+
+\noindent\begin{minipage}{\linewidth}
+\textbf{Map 7}
+\begin{lstlisting}
+    #    
+   # #   
+  #   #  
+ #  C  #
+#  X    #
+# SX #C #
+#       #
+#########
+\end{lstlisting}
+\end{minipage}
+
+\noindent\begin{minipage}{\linewidth}
+\textbf{Map 8}
+\begin{lstlisting}
+    #    
+   # #   
+  #   #  
+ #     #
+#  X    #
+# S#C   #
+#       #
+#########
+\end{lstlisting}
+\end{minipage}
+
+\end{multicols}
+
+
+\end{document}
