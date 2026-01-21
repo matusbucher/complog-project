@@ -138,6 +138,27 @@ class LogicProgramInterface(ABC):
         Return the maximum number of steps the logic program can handle.
         """
         raise NotImplementedError
+    
+    @abstractmethod
+    def get_goal_step(self) -> Optional[int]:
+        """
+        Return the currently set goal step, or None if not set.
+        """
+        raise NotImplementedError
+    
+    @abstractmethod
+    def get_num_variables(self, step: Optional[int] = None) -> int:
+        """
+        Return the number of variables in the current logic program encoding.
+        """
+        raise NotImplementedError
+    
+    @abstractmethod
+    def get_num_clauses(self, step: Optional[int] = None) -> int:
+        """
+        Return the number of clauses in the current logic program encoding.
+        """
+        raise NotImplementedError
 
     @abstractmethod
     def lit_to_str(self, literal: int) -> str:

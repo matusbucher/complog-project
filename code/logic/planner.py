@@ -61,7 +61,7 @@ class Planner():
         Check if the problem is solvable within the maximum number of steps.
         """
         self._logic_program.set_goal(self._logic_program.get_max_steps()).save_dimacs(self._solver_input)
-        
+
         result = subprocess.run(
             [self._solver_path, self._solver_input, self._solver_output],
             capture_output=True,
@@ -116,6 +116,7 @@ class Planner():
         
         # Run MiniSat again for the shortest plan to extract the sequence of actions
         self._logic_program.set_goal(least_steps).save_dimacs(self._solver_input)
+
         result = subprocess.run(
             [self._solver_path, self._solver_input, self._solver_output],
             capture_output=True,
@@ -131,6 +132,19 @@ class Planner():
         self._logic_program.save_cnf_readable(path)
         return self
 
+    def debug_print(self) -> None:
+        """
+        Print debugging information about the current underlying logic program. Specifically, the number of variables and clauses and MiniSAT execution time.
+        """
+        max_steps = self._logic_program.get_max_steps()
+        goal_step = self._logic_program.get_goal_step()
+        print("DEBUG INFO:")
+        print(f"Variable for max step ({max_steps}): {self._logic_program.get_num_variables(max_steps)}")
+        print(f"Clauses for max step ({max_steps}): {self._logic_program.get_num_clauses(max_steps)}")
+        if goal_step is not None:
+            print(f"Variable for goal step ({goal_step}): {self._logic_program.get_num_variables(goal_step)}")
+            print(f"Clauses for goal step ({goal_step}): {self._logic_program.get_num_clauses(goal_step)}")
+
     def __parse_solution(self) -> Solution:
         solution: List[str] = []
         with open(self._solver_output, "r") as file:
@@ -138,21 +152,3 @@ class Planner():
             literals = [int(x) for x in file.readline().strip().split() if x != "0"]
             solution = self._logic_program.extract_solution(literals)
         return solution
-    
-    def debug_print(self, path: Optional[PathLike] = None) -> Planner:
-        pos_vars: List[str] = []
-        with open(self._solver_output, "r") as file:
-            file.readline()  # Skip "SAT" line
-            literals = [int(x) for x in file.readline().strip().split() if x != "0"]
-            pos_vars = [self._logic_program.lit_to_str(lit) for lit in literals if lit > 0]
-        
-        if path is None:
-            for var in pos_vars:
-                print(var)
-            return self
-        
-        p = Path(path)
-        with p.open("w") as file:
-            for var in pos_vars:
-                file.write(f"{var}\n")
-        return self

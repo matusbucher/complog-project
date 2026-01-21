@@ -37,27 +37,26 @@ class LogicProgramOptimized(LogicProgramInterface):
         self._max_steps: int = max_steps
 
         # Mappings from integer literals to variables
-        self._vars_map: Optional[List[str]] = []
-        self._action_map: Optional[Dict[int, Tuple[Action, int]]] = {}
-        self._argX_map: Optional[Dict[int, Tuple[int, int]]] = {}
-        self._argY_map: Optional[Dict[int, Tuple[int, int]]] = {}
-        self._argD_map: Optional[Dict[int, Tuple[Direction, int]]] = {}
-
+        self._vars_map: List[str] = []
+        self._action_map: Dict[int, Tuple[Action, int]] = {}
+        self._argX_map: Dict[int, Tuple[int, int]] = {}
+        self._argY_map: Dict[int, Tuple[int, int]] = {}
+        self._argD_map: Dict[int, Tuple[Direction, int]] = {}
         # Caches for variable lookups to avoid creating duplicates
-        self._wall_vars: Optional[Dict[Tuple[int, int], int]] = {}
-        self._storage_vars: Optional[Dict[Tuple[int, int], int]] = {}
-        self._crate_vars: Optional[Dict[Tuple[int, int, int], int]] = {}
-        self._sokobanX_vars: Optional[Dict[Tuple[int, int], int]] = {}
-        self._sokobanY_vars: Optional[Dict[Tuple[int, int], int]] = {}
-        self._action_vars: Optional[Dict[Tuple[Action, int], int]] = {}
-        self._argX_vars: Optional[Dict[Tuple[int, int], int]] = {}
-        self._argY_vars: Optional[Dict[Tuple[int, int], int]] = {}
-        self._argD_vars: Optional[Dict[Tuple[Direction, int], int]] = {}
+        self._wall_vars: Dict[Tuple[int, int], int] = {}
+        self._storage_vars: Dict[Tuple[int, int], int] = {}
+        self._crate_vars: Dict[Tuple[int, int, int], int] = {}
+        self._sokobanX_vars: Dict[Tuple[int, int], int] = {}
+        self._sokobanY_vars: Dict[Tuple[int, int], int] = {}
+        self._action_vars: Dict[Tuple[Action, int], int] = {}
+        self._argX_vars: Dict[Tuple[int, int], int] = {}
+        self._argY_vars: Dict[Tuple[int, int], int] = {}
+        self._argD_vars: Dict[Tuple[Direction, int], int] = {}
 
         # Initial state and clause store. Clauses are grouped per step for convenience when
         # writing out step-bounded encodings and to avoid generating clauses repeatedly.
-        self._init_state: Optional[List[int]] = []
-        self._clauses: Optional[List[List[List[int]]]] = [[] for _ in range(self._max_steps)]
+        self._init_state: List[int] = []
+        self._clauses: List[List[List[int]]] = [[] for _ in range(self._max_steps)]
 
         # Build the encoding.
         self.__add_init()
@@ -67,6 +66,7 @@ class LogicProgramOptimized(LogicProgramInterface):
         self.__add_frame_axioms()
 
         # Goal step to be set before saving DIMACS
+        self._goal_step: Optional[int] = None
         self._goal_state: Optional[List[int]] = None
 
     def set_goal(self, steps: int) -> LogicProgramOptimized:
@@ -83,8 +83,8 @@ class LogicProgramOptimized(LogicProgramInterface):
         return self
     
     def save_dimacs(self, path: PathLike) -> LogicProgramOptimized:      
-        num_vars = len(self._vars_map)
-        num_clauses = len(self._init_state) + len(self._goal_state) + sum(len(self._clauses[s]) for s in range(self._goal_step))
+        num_vars = self.get_num_variables()
+        num_clauses = self.get_num_clauses()
 
         p = Path(path)
         with p.open("w") as file:
@@ -123,6 +123,50 @@ class LogicProgramOptimized(LogicProgramInterface):
     
     def get_max_steps(self) -> int:
         return self._max_steps
+    
+    def get_goal_step(self) -> Optional[int]:
+        return self._goal_step
+    
+    def get_num_variables(self, step: Optional[int] = None) -> int:
+        if step is not None:
+            if step > self._max_steps:
+                raise ValueError(f"Requested steps ({step}) exceed maximum configured steps ({self._max_steps}).")
+
+            result = len(self._wall_vars)
+            result += len(self._storage_vars)
+            
+            for key in self._crate_vars:
+                if key[2] <= step:
+                    result += 1
+            for key in self._sokobanX_vars:
+                if key[1] <= step:
+                    result += 1
+            for key in self._sokobanY_vars:
+                if key[1] <= step:
+                    result += 1
+            for key in self._action_vars:
+                if key[1] < step:
+                    result += 1
+            for key in self._argX_vars:
+                if key[1] < step:
+                    result += 1
+            for key in self._argY_vars:
+                if key[1] < step:
+                    result += 1
+            for key in self._argD_vars:
+                if key[1] < step:
+                    result += 1
+    
+            return result
+        
+        return len(self._vars_map)
+    
+    def get_num_clauses(self, step: Optional[int] = None) -> int:
+        if step is not None:
+            if step > self._max_steps:
+                raise ValueError(f"Requested steps ({step}) exceed maximum configured steps ({self._max_steps}).")
+            return len(self._init_state) + len(self._goal_state) + sum(len(self._clauses[s]) for s in range(step))
+        return len(self._init_state) + sum(len(self._clauses[s]) for s in range(self._max_steps))
     
     def lit_to_str(self, literal: int) -> str:
         index = abs(literal) - 1

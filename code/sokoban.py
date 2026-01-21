@@ -9,7 +9,6 @@ Dependencies:
 
 import argparse
 
-from logic.logic_program_interface import Action, Solution
 from logic.planner import Planner
 from logic.map_parser import MapParser, MapParserError
 
@@ -21,6 +20,7 @@ ARGPARSER = argparse.ArgumentParser(
 ARGPARSER.add_argument("mapfile", type=str, help="Path to the Sokoban map file.")
 ARGPARSER.add_argument("minisat", type=str, help="Path to the MiniSat executable.")
 ARGPARSER.add_argument("-O", "--optimize", action="store_true", help="Enable optimizations in the planning encoding.")
+ARGPARSER.add_argument("-d", "--debug", action="store_true", help="Print number of variables and clauses.")
 ARGPARSER.add_argument("-s", "--maxsteps", type=int, metavar="MAXSTEPS", default=50, help="Maximum number of steps to search for a solution (default 50).")
 ARGPARSER.add_argument("-i", "--input", type=str, metavar="FILENAME", default="solver_input.cnf", help="File where the input for MiniSat will be stored. The file will be created/overwritten, so it need not exist beforehand (default 'solver_input.cnf').")
 ARGPARSER.add_argument("-o", "--output", type=str, metavar="FILENAME", default="solver_output.cnf", help="File where the output from MiniSat will be stored. The file will be created/overwritten, so it need not exist beforehand (default 'solver_output.cnf').")
@@ -57,6 +57,10 @@ if __name__ == "__main__":
         solution = planner.find_shortest_solution()
         for step in solution:
             print(step.to_string())
+
+    if args.debug:
+        print()
+        planner.debug_print()
 
     if args.readablecnf is not None:
         planner.save_readable_cnf(args.readablecnf)
