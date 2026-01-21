@@ -144,7 +144,7 @@ You need to set the path to a MiniSat executable and to a folder for MiniSat inp
 
 ### Edit Mode
 
-To create a new map, click **"Map" -> "New Map"** and enter the desired dimensions. Maximum map size is 20x20. Alternatively, you can load an existing map from a file by clicking **"Map" -> "Import"** and selecting a text file containing the map in the expected format.
+To create a new map, click **"Map" -> "New Map"** and enter the desired dimensions. Maximum map size is 15x15. Alternatively, you can load an existing map from a file by clicking **"Map" -> "Import"** and selecting a text file containing the map in the expected format.
 
 You can then edit the map by selecting tools from the control panel and clicking on the grid to place selected tile/object. Use **right-click to erase an object** on a tile (Sokoban or crate).
 
